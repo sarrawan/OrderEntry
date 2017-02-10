@@ -77,24 +77,40 @@ namespace OrderEntryMockingPracticeTests
         {
             var order = CreateValidOrder();
             order.OrderItems.Add(order.OrderItems[0]); // add duplicate item
+            
+            // now want to make sure than an exception is thrown in PlaceOrder
+            // move the ensure method to PlaceOrder so that the check can happen
+            // there and not in the test, make sure the test only checks what happens
+            // doesn't actually implement the checking 
 
             var reasons = Assert.Throws<OrderService.OrderPlacementValidationException>(() =>
             {
                 orderService.PlaceOrder(new Order());
             }).Reasons;
 
+            // this should be the name that you use, not fredbob, but maybe laptop?
             Assert.That(reasons, Has.Member("Product sku 'fredbob' is not unique in the order."));
         }
 
         [Test]
         public void WhenAProductIsNotInStock()
         {
+             // do something like
+            //_productRepository.IsInStock("laptop").Returns(true);
+            //_productRepository.IsInStock("tablet").Returns(false);
+            // symbolizes that laptop is in fact in stock and laptop is not in stock
             Assert.Fail("not implemented");
         }
 
         [Test]
         public void WhenMoreThanOneProductIsNotInStock()
         {
+            // do something like
+            //_productRepository.IsInStock("laptop").Returns(false);
+            //_productRepository.IsInStock("tablet").Returns(false);
+            //_productRepository.IsInStock("keyboard").Returns(false);
+            
+            // symbolizes that laptop is in fact in stock and laptop is not in stock
             Assert.Fail("not implemented: I should get a separate message for each product.");
         }
 
@@ -111,6 +127,7 @@ namespace OrderEntryMockingPracticeTests
             });
         }
 
+        // this test is fine, maybe dont want to refactor too much 
         [Test]
         public void ValidOrder_OrderSummaryReturned()
         {
@@ -124,6 +141,7 @@ namespace OrderEntryMockingPracticeTests
             Assert.IsInstanceOf<OrderSummary>(results);
         }
 
+        // this test should be fine 
         [Test]
         public void ValidOrder_OrderSummaryReturned_AndSubmittedToOrderFulfillmentService()
         {
@@ -137,6 +155,7 @@ namespace OrderEntryMockingPracticeTests
             _orderFulfillmentService.Received().Fulfill(order);
         }
 
+        // this test should be checked
         [Test]
         public void ValidOrder_OrderSummaryReturned_AndContainsConfirmationNumber()
         {
@@ -150,7 +169,7 @@ namespace OrderEntryMockingPracticeTests
             results.OrderNumber.ShouldBe(OrderNumber);
         }
 
-
+        // this test should be checked
         [Test]
         public void ValidOrder_OrderSummaryReturned_AndContainsIDGeneratedByOrderFulfillmentService()
         {
@@ -164,6 +183,7 @@ namespace OrderEntryMockingPracticeTests
             results.OrderId.ShouldBe(OrderId);
         }
 
+        // this test should be checked
         [Test]
         public void ValidOrder_OrderSummaryReturned_AndContainsApplicableTaxesForCustomer()
         {
@@ -179,6 +199,7 @@ namespace OrderEntryMockingPracticeTests
             result.Taxes.Count().ShouldBe(taxEntryList.Count);
         }
 
+        // this test should be checked
         [Test]
         public void TaxEntryForCustomerIsValidAndNotEmpty()
         {
@@ -192,7 +213,8 @@ namespace OrderEntryMockingPracticeTests
             result.Taxes.Count().ShouldBeGreaterThan(0);
             result.CustomerId.ShouldBe((int)order.CustomerId);        
         }
-
+        
+        // this test should be fine 
         [Test]
         public void ValidOrder_OrderSummaryReturned_AndHasCorrectNetTotal()
         {
@@ -208,6 +230,7 @@ namespace OrderEntryMockingPracticeTests
             results.NetTotal.ShouldBe(expectedNetTotal);
         }
 
+        // this test should be fine 
         [Test]
         public void ValidOrder_OrderSummaryReturned_AndHasCorrectOrderTotal()
         {
@@ -226,6 +249,7 @@ namespace OrderEntryMockingPracticeTests
             results.Total.ShouldBe(expectedOrderTotal);
         }
 
+        // this test should be checked
         [Test]
         public void ValidOrder_OrderSummaryReturned_AndConfirmationEmailSentToCustomer()
         {
@@ -239,6 +263,7 @@ namespace OrderEntryMockingPracticeTests
             _emailService.Received().SendOrderConfirmationEmail(results.CustomerId, results.OrderId);
         }
 
+        // this test should be checked
         [Test]
         public void CustomerInfoCanBeRetrievedFromCustomerRepository()
         {
@@ -253,6 +278,7 @@ namespace OrderEntryMockingPracticeTests
             
         }
 
+        // this test should be checked
         [Test]
         public void TaxesCanBeRetrievedFromTaxRateServiceRepository()
         {
@@ -266,6 +292,7 @@ namespace OrderEntryMockingPracticeTests
             _taxRateService.Received().GetTaxEntries(Arg.Any<string>(), Arg.Any<string>());
         }
 
+        // this test should be checked
         [Test]
         public void ProductRepositoryCanBeUsedToDetermineProductsInStock()
         {
@@ -321,6 +348,7 @@ namespace OrderEntryMockingPracticeTests
             return new List<TaxEntry> { CreateTaxEntry(), CreateTaxEntry(), CreateTaxEntry()};
         }
         
+        // probably dont want to use something like this
         private Order ValidOrderSetup()
         {
             _customerRepository.Get(Arg.Any<int>())
@@ -335,6 +363,7 @@ namespace OrderEntryMockingPracticeTests
             return CreateValidOrder();
         }
 
+        // probably dont want to use something like this
         private Order InvalidOrderSetup()
         {
             _customerRepository.Get(Arg.Any<int>())
@@ -349,6 +378,7 @@ namespace OrderEntryMockingPracticeTests
             return null;
         }
 
+        // not sure if want to use something like this
         private static Order CreateValidOrder()
         {
             var order = new Order
@@ -381,6 +411,8 @@ namespace OrderEntryMockingPracticeTests
             return order;
         }
 
+        // this method should be removed from here, it should be eneterd
+        // into the OrderService.PlaceOrder method, not here
         public bool EnsureOrderItemProductsUnique(List<OrderItem> orderItems)
         {
             List<String> productSkUsInOrder = new List<String>();

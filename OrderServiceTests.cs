@@ -1,4 +1,5 @@
 // want to make "negative tests" --> so test for when there are no products in stock --> want it to be specific
+// need the NUnit, Nsubstitute, and Shouldly packages
 
 
 using System;

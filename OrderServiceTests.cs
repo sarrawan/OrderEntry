@@ -428,3 +428,775 @@ namespace OrderEntryMockingPracticeTests
 
     }
 }
+
+/*
+
+using System.Collections.Generic;
+using System.Security.Cryptography.X509Certificates;
+using NUnit.Framework;
+using NSubstitute;
+using OrderEntryMockingPractice.Models;
+using OrderEntryMockingPractice.Services;
+using Shouldly;
+using System.Linq;
+
+namespace OrderEntryMockingPracticeTests
+{
+    [TestFixture]
+    public class OrderServiceTests
+    {
+
+        IOrderFulfillmentService _orderFulfillmentService;
+        IEmailService _emailService;
+        ICustomerRepository _customerRepository;
+        IProductRepository _productRepository;
+        ITaxRateService _taxRateService;
+
+        OrderService orderService;
+
+        private string expectedOrderNumber = "123";
+        private int expectedOrderID = 1;
+        private int expectedCustomerID = 10;
+        private decimal expectedNetTotal = 400M;
+
+
+        [SetUp]
+        public void SetUp()
+        {
+            _customerRepository = Substitute.For<ICustomerRepository>();
+            _productRepository = Substitute.For<IProductRepository>();
+            _orderFulfillmentService = Substitute.For<IOrderFulfillmentService>();
+            _taxRateService = Substitute.For<ITaxRateService>();
+            _emailService = Substitute.For<IEmailService>();
+
+            this.orderService = new OrderService(this._orderFulfillmentService, this._productRepository, this._customerRepository, this._taxRateService, this._emailService);
+
+        }
+
+        [Test]
+        public void OneOrderItemNotUniqueByProductSKU()
+        {
+            // Arrange
+            _customerRepository.Get(Arg.Any<int>()).Returns(new Customer() { CustomerId = expectedCustomerID });
+            _productRepository.IsInStock(Arg.Any<string>()).Returns(true);
+            _orderFulfillmentService.Fulfill(Arg.Any<Order>()).Returns(new OrderConfirmation());
+            _taxRateService.GetTaxEntries(Arg.Any<string>(), Arg.Any<string>()).Returns(new List<TaxEntry> { new TaxEntry() });
+
+            var order = new Order
+            {
+                CustomerId = 30,
+                OrderItems = new List<OrderItem>
+                {
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 210,
+                            Sku = "Laptop",
+                            Price = 200M
+                        },
+                        Quantity = 1
+                    },
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 370,
+                            Sku = "Tablet",
+                            Price = 100M
+                        },
+                        Quantity = 2
+                    }
+                }
+            };
+
+            order.OrderItems.Add(order.OrderItems[0]);
+
+            var orderService = new OrderService(_orderFulfillmentService, _productRepository, _customerRepository, _taxRateService, _emailService);
+
+
+            // Act and Assert
+            var reasons = Assert.Throws<OrderPlacementValidationException>(() =>
+            {
+                orderService.PlaceOrder(order);
+            }).Reasons;
+
+            Assert.That(reasons, Has.Member("Product sku 'Laptop' is not unique in the order."));
+        }
+
+        [Test]
+        public void MultipleOrderItemsNotUniqueByProductSKU()
+        {
+            // Arrange
+            _customerRepository.Get(Arg.Any<int>()).Returns(new Customer() { CustomerId = expectedCustomerID });
+            _productRepository.IsInStock(Arg.Any<string>()).Returns(true);
+            _orderFulfillmentService.Fulfill(Arg.Any<Order>()).Returns(new OrderConfirmation());
+            _taxRateService.GetTaxEntries(Arg.Any<string>(), Arg.Any<string>()).Returns(new List<TaxEntry> { new TaxEntry() });
+
+            var order = new Order
+            {
+                CustomerId = 30,
+                OrderItems = new List<OrderItem>
+                {
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 210,
+                            Sku = "Laptop",
+                            Price = 200M
+                        },
+                        Quantity = 1
+                    },
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 370,
+                            Sku = "Tablet",
+                            Price = 100M
+                        },
+                        Quantity = 2
+                    }
+                }
+            };
+
+            order.OrderItems.Add(order.OrderItems[0]);
+            order.OrderItems.Add(order.OrderItems[0]);
+            order.OrderItems.Add(order.OrderItems[1]);
+
+            var orderService = new OrderService(_orderFulfillmentService, _productRepository, _customerRepository, _taxRateService, _emailService);
+
+
+            // Act and Assert
+            var reasons = Assert.Throws<OrderPlacementValidationException>(() =>
+            {
+                orderService.PlaceOrder(order);
+            }).Reasons;
+
+            Assert.That(reasons, Has.Member("Product sku 'Laptop' is not unique in the order."));
+            Assert.That(reasons, Has.Member("Product sku 'Tablet' is not unique in the order."));
+        }
+
+        [Test]
+        public void WhenOneProductNotInStock()
+        {
+            // Arrange
+            _customerRepository.Get(Arg.Any<int>()).Returns(new Customer() { CustomerId = expectedCustomerID } );
+            _orderFulfillmentService.Fulfill(Arg.Any<Order>()).Returns(new OrderConfirmation());
+            _taxRateService.GetTaxEntries(Arg.Any<string>(), Arg.Any<string>()).Returns(new List<TaxEntry> { new TaxEntry() });
+
+            var orderService = new OrderService(_orderFulfillmentService, _productRepository, _customerRepository, _taxRateService, _emailService);
+
+            var order = new Order
+            {
+                CustomerId = 30,
+                OrderItems = new List<OrderItem>
+                {
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            Sku = "Laptop",
+                        },
+                    },
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            Sku = "Tablet",
+                        },
+                    }
+                }
+            };
+
+            _productRepository.IsInStock("Laptop").Returns(true);
+            _productRepository.IsInStock("Tablet").Returns(false);
+
+            // Act and Assert
+            var reasons = Assert.Throws<OrderPlacementValidationException>(() =>
+            {
+                orderService.PlaceOrder(order);
+            }).Reasons;
+
+            Assert.That(reasons, Has.Member("There is not enough stock available for the product sku 'Tablet' to complete the order"));
+        }
+
+        [Test]
+        public void WhenMultipleProductsNotInStock()
+        {
+            // Arrange
+            _customerRepository.Get(Arg.Any<int>()).Returns(new Customer() { CustomerId = expectedCustomerID });
+            _orderFulfillmentService.Fulfill(Arg.Any<Order>()).Returns(new OrderConfirmation());
+            _taxRateService.GetTaxEntries(Arg.Any<string>(), Arg.Any<string>()).Returns(new List<TaxEntry> { new TaxEntry() });
+
+            var orderService = new OrderService(_orderFulfillmentService, _productRepository, _customerRepository, _taxRateService, _emailService);
+
+            var order = new Order
+            {
+                CustomerId = 30,
+                OrderItems = new List<OrderItem>
+                {
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            Sku = "Laptop",
+                        },
+                    },
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            Sku = "Tablet",
+                        },
+                    }
+                }
+            };
+
+            _productRepository.IsInStock("Laptop").Returns(false);
+            _productRepository.IsInStock("Tablet").Returns(false);
+
+            // Act and Assert
+            var reasons = Assert.Throws<OrderPlacementValidationException>(() =>
+            {
+                orderService.PlaceOrder(order);
+            }).Reasons;
+
+            Assert.That(reasons, Has.Member("There is not enough stock available for the product sku 'Tablet' to complete the order"));
+            Assert.That(reasons, Has.Member("There is not enough stock available for the product sku 'Laptop' to complete the order"));
+        }
+
+        [Test]
+        public void OrderInvalid_ExceptionWithListOfReasons()
+        {
+            _customerRepository.Get(expectedCustomerID).Returns(new Customer());
+            _productRepository.IsInStock(Arg.Any<string>()).Returns(false);
+
+            var orderService = new OrderService(_orderFulfillmentService, _productRepository, _customerRepository, _taxRateService, _emailService);
+
+            var order = new Order
+            {
+                CustomerId = 30,
+                OrderItems = new List<OrderItem>
+                {
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 210,
+                            Sku = "Laptop",
+                            Price = 200M
+                        },
+                        Quantity = 100
+                    },
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 370,
+                            Sku = "Tablet",
+                            Price = 100M
+                        },
+                        Quantity = 200
+                    }
+                }
+            };
+
+            // Act and Assert
+            var reasons = Assert.Throws<OrderPlacementValidationException>(() =>
+            {
+                orderService.PlaceOrder(order);
+            }).Reasons;
+            reasons.Count().ShouldBeGreaterThan(0);
+        }
+
+        [Test]
+        public void OrderValid_OrderSummaryReturned()
+        {
+            // Arrange
+
+            ////// MIGHT WANT TO CHANGE THIS 
+            _customerRepository.Get(Arg.Any<int>()).Returns(new Customer());
+            _productRepository.IsInStock(Arg.Any<string>()).Returns(true);
+            _orderFulfillmentService.Fulfill(Arg.Any<Order>()).Returns(new OrderConfirmation());
+            _taxRateService.GetTaxEntries(Arg.Any<string>(), Arg.Any<string>()).Returns(new List<TaxEntry> { new TaxEntry() });
+
+            var orderService = new OrderService(_orderFulfillmentService, _productRepository, _customerRepository, _taxRateService, _emailService);
+
+            var order = new Order
+            {
+                CustomerId = 30,
+                OrderItems = new List<OrderItem>
+                {
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 210,
+                            Sku = "Laptop",
+                            Price = 200M
+                        },
+                        Quantity = 100
+                    },
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 370,
+                            Sku = "Tablet",
+                            Price = 100M
+                        },
+                        Quantity = 200
+                    }
+                }
+            };
+
+            // Act
+            var results = orderService.PlaceOrder(order);
+
+            // Assert
+            Assert.IsInstanceOf<OrderSummary>(results);
+        }
+
+        [Test]
+        public void ValidOrder_OrderSummaryReturned_SubmittedToOrderFulfillmentService()
+        {
+            // Arrange
+            _customerRepository.Get(Arg.Any<int>()).Returns(new Customer());
+            _productRepository.IsInStock(Arg.Any<string>()).Returns(true);
+            _orderFulfillmentService.Fulfill(Arg.Any<Order>()).Returns(new OrderConfirmation());
+            _taxRateService.GetTaxEntries(Arg.Any<string>(), Arg.Any<string>()).Returns(new List<TaxEntry> { new TaxEntry() });
+
+            var orderService = new OrderService(_orderFulfillmentService, _productRepository, _customerRepository, _taxRateService, _emailService);
+
+            var order = new Order
+            {
+                CustomerId = 30,
+                OrderItems = new List<OrderItem>
+                {
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 210,
+                            Sku = "Laptop",
+                            Price = 200M
+                        },
+                        Quantity = 100
+                    },
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 370,
+                            Sku = "Tablet",
+                            Price = 100M
+                        },
+                        Quantity = 200
+                    }
+                }
+            };
+
+            // Act
+            var results = orderService.PlaceOrder(order);
+
+            // Assert
+            _orderFulfillmentService.Received().Fulfill(order);
+        }
+
+        [Test]
+        public void ValidOrder_OrderSummaryReturned_ContainsOrderFulfillmentConfirmationNumber()
+        {
+            // Arrange
+            _customerRepository.Get(Arg.Any<int>()).Returns(new Customer());
+            _productRepository.IsInStock(Arg.Any<string>()).Returns(true);
+            _orderFulfillmentService.Fulfill(Arg.Any<Order>()).Returns(new OrderConfirmation() { OrderNumber = expectedOrderNumber });
+            _taxRateService.GetTaxEntries(Arg.Any<string>(), Arg.Any<string>()).Returns(new List<TaxEntry> { new TaxEntry() });
+
+            var orderService = new OrderService(_orderFulfillmentService, _productRepository, _customerRepository, _taxRateService, _emailService);
+
+            var order = new Order
+            {
+                CustomerId = 30,
+                OrderItems = new List<OrderItem>
+                {
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 210,
+                            Sku = "Laptop",
+                            Price = 200M
+                        },
+                        Quantity = 100
+                    },
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 370,
+                            Sku = "Tablet",
+                            Price = 100M
+                        },
+                        Quantity = 200
+                    }
+                }
+            };
+
+            // Act
+            var results = orderService.PlaceOrder(order);
+
+            // Assert
+            results.OrderNumber.ShouldBe(expectedOrderNumber);
+        }
+
+        [Test]
+        public void ValidOrder_OrderSummaryReturned_ContainsIDGeneratedByOrderFulfillmentService()
+        {
+            // Arrange
+            _customerRepository.Get(Arg.Any<int>()).Returns(new Customer());
+            _productRepository.IsInStock(Arg.Any<string>()).Returns(true);
+            _orderFulfillmentService.Fulfill(Arg.Any<Order>()).Returns(new OrderConfirmation() { OrderId = expectedOrderID});
+            _taxRateService.GetTaxEntries(Arg.Any<string>(), Arg.Any<string>()).Returns(new List<TaxEntry> { new TaxEntry() });
+
+            var orderService = new OrderService(_orderFulfillmentService, _productRepository, _customerRepository, _taxRateService, _emailService);
+
+            var order = new Order
+            {
+                CustomerId = 30,
+                OrderItems = new List<OrderItem>
+                {
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 210,
+                            Sku = "Laptop",
+                            Price = 200M
+                        },
+                        Quantity = 100
+                    },
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 370,
+                            Sku = "Tablet",
+                            Price = 100M
+                        },
+                        Quantity = 200
+                    }
+                }
+            };
+
+            // Act
+            var results = orderService.PlaceOrder(order);
+
+            // Assert
+            results.OrderId.ShouldBe(expectedOrderID);
+
+        }
+
+        [Test]
+        public void ValidOrder_OrderSummaryReturned_ContainsApplicableTaxes()
+        {
+            // Arrange
+            _customerRepository.Get(Arg.Any<int>()).Returns(new Customer() { CustomerId = expectedCustomerID});
+            _productRepository.IsInStock(Arg.Any<string>()).Returns(true);
+            _orderFulfillmentService.Fulfill(Arg.Any<Order>()).Returns(new OrderConfirmation());
+
+            var taxEntry = new TaxEntry { Description = "Sales", Rate = 1.2M };
+
+            _taxRateService.GetTaxEntries(Arg.Any<string>(), Arg.Any<string>()).Returns(new List<TaxEntry> { taxEntry });
+
+            var orderService = new OrderService(_orderFulfillmentService, _productRepository, _customerRepository, _taxRateService, _emailService);
+
+            var order = new Order
+            {
+                CustomerId = expectedCustomerID,
+                OrderItems = new List<OrderItem>
+                {
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 210,
+                            Sku = "Laptop",
+                            Price = 200M
+                        },
+                        Quantity = 100
+                    },
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 370,
+                            Sku = "Tablet",
+                            Price = 100M
+                        },
+                        Quantity = 200
+                    }
+                }
+            };
+
+            // Act
+            var results = orderService.PlaceOrder(order);
+
+            // Assert
+            results.Taxes.ShouldContain(taxEntry);
+        }
+
+        [Test]
+        public void ValidOrder_OrderSummaryReturned_NetTotalCalculated()
+        {
+            // Arrange
+            _customerRepository.Get(Arg.Any<int>()).Returns(new Customer());
+            _productRepository.IsInStock(Arg.Any<string>()).Returns(true);
+            _orderFulfillmentService.Fulfill(Arg.Any<Order>()).Returns(new OrderConfirmation());
+            _taxRateService.GetTaxEntries(Arg.Any<string>(), Arg.Any<string>()).Returns(new List<TaxEntry> { new TaxEntry() });
+
+            var orderService = new OrderService(_orderFulfillmentService, _productRepository, _customerRepository, _taxRateService, _emailService);
+
+            var order = new Order
+            {
+                CustomerId = 30,
+                OrderItems = new List<OrderItem>
+                {
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 210,
+                            Sku = "Laptop",
+                            Price = 200M
+                        },
+                        Quantity = 1
+                    },
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 370,
+                            Sku = "Tablet",
+                            Price = 100M
+                        },
+                        Quantity = 2
+                    }
+                }
+            };
+
+            // Act
+            var results = orderService.PlaceOrder(order);
+
+            // Assert
+            results.NetTotal.ShouldBe(expectedNetTotal);
+        }
+
+        [Test]
+        public void ValidOrder_OrderSummaryReturned_OrderTotalCalculated()
+        {
+            // Arrange
+            var customer = new Customer
+            {
+                CustomerId = expectedCustomerID,
+                PostalCode = "12345",
+                Country = "USA"
+            };
+            _customerRepository.Get(Arg.Any<int>()).Returns(customer);
+            _productRepository.IsInStock(Arg.Any<string>()).Returns(true);
+            _orderFulfillmentService.Fulfill(Arg.Any<Order>()).Returns(new OrderConfirmation());
+
+            var taxEntry1 = new TaxEntry { Rate = 1.2M };
+            var taxEntry2 = new TaxEntry { Rate = 1.5M };
+            var taxEntryList = new List<TaxEntry> { taxEntry1, taxEntry2 };
+            
+            _taxRateService.GetTaxEntries(customer.PostalCode, customer.Country).Returns(taxEntryList);
+
+            var orderService = new OrderService(_orderFulfillmentService, _productRepository, _customerRepository, _taxRateService, _emailService);
+
+            var order = new Order
+            {
+                CustomerId = 30,
+                OrderItems = new List<OrderItem>
+                {
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 210,
+                            Sku = "Laptop",
+                            Price = 200M
+                        },
+                        Quantity = 1
+                    },
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 370,
+                            Sku = "Tablet",
+                            Price = 100M
+                        },
+                        Quantity = 2
+                    }
+                }
+            };
+
+            var expectedOrderTotal = taxEntryList.Sum(t => t.Rate * expectedNetTotal);
+
+            // Act
+            var results = orderService.PlaceOrder(order);
+
+            // Assert
+            results.Total.ShouldBe(expectedOrderTotal);
+        }
+
+        [Test]
+        public void ValidOrder_OrderSummaryReturned_ConfirmationEmailSentToCustomer()
+        {
+            // Arrange
+            _customerRepository.Get(Arg.Any<int>()).Returns(new Customer());
+            _productRepository.IsInStock(Arg.Any<string>()).Returns(true);
+            _orderFulfillmentService.Fulfill(Arg.Any<Order>()).Returns(new OrderConfirmation() { OrderId = expectedOrderID, CustomerId = expectedCustomerID});
+            _taxRateService.GetTaxEntries(Arg.Any<string>(), Arg.Any<string>()).Returns(new List<TaxEntry> { new TaxEntry() });
+
+            var orderService = new OrderService(_orderFulfillmentService, _productRepository, _customerRepository, _taxRateService, _emailService);
+
+            var order = new Order
+            {
+                CustomerId = 30,
+                OrderItems = new List<OrderItem>
+                {
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 210,
+                            Sku = "Laptop",
+                            Price = 200M
+                        },
+                        Quantity = 1
+                    },
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 370,
+                            Sku = "Tablet",
+                            Price = 100M
+                        },
+                        Quantity = 2
+                    }
+                }
+            };
+
+            // Act
+            var results = orderService.PlaceOrder(order);
+
+            // Assert
+            _emailService.Received().SendOrderConfirmationEmail(expectedCustomerID, expectedOrderID);
+        }
+
+        [Test]
+        public void CustomerInformationCannotBeRetrieved()
+        {
+            // Arrange
+            _customerRepository.Get(expectedCustomerID).Returns(new Customer());
+            _productRepository.IsInStock(Arg.Any<string>()).Returns(true);
+            _orderFulfillmentService.Fulfill(Arg.Any<Order>()).Returns(new OrderConfirmation() { OrderId = expectedOrderID, CustomerId = expectedCustomerID });
+            _taxRateService.GetTaxEntries(Arg.Any<string>(), Arg.Any<string>()).Returns(new List<TaxEntry> { new TaxEntry() });
+
+            var orderService = new OrderService(_orderFulfillmentService, _productRepository, _customerRepository, _taxRateService, _emailService);
+
+            var order = new Order
+            {
+                CustomerId = 30,
+                OrderItems = new List<OrderItem>
+                {
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 210,
+                            Sku = "Laptop",
+                            Price = 200M
+                        },
+                        Quantity = 1
+                    },
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 370,
+                            Sku = "Tablet",
+                            Price = 100M
+                        },
+                        Quantity = 2
+                    }
+                }
+            };
+
+            // Act and Assert
+            var reasons = Assert.Throws<OrderPlacementValidationException>(() =>
+            {
+                orderService.PlaceOrder(order);
+            }).Reasons;
+
+            Assert.That(reasons, Has.Member("Customer not found"));
+        }
+
+        [Test]
+        public void TaxEntryCannotBeRetrievedFromTaxRateService()
+        {
+            // Arrange
+            var customer = new Customer() { PostalCode = "12345", Country = "USA" };
+            _customerRepository.Get(Arg.Any<int>()).Returns(customer);
+            _productRepository.IsInStock(Arg.Any<string>()).Returns(true);
+            _orderFulfillmentService.Fulfill(Arg.Any<Order>()).Returns(new OrderConfirmation() { OrderId = expectedOrderID, CustomerId = expectedCustomerID });
+            _taxRateService.GetTaxEntries(customer.PostalCode, customer.Country).Returns(new List<TaxEntry>() { new TaxEntry() });
+
+            var orderService = new OrderService(_orderFulfillmentService, _productRepository, _customerRepository, _taxRateService, _emailService);
+
+            var order = new Order
+            {
+                CustomerId = 30,
+                OrderItems = new List<OrderItem>
+                {
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 210,
+                            Sku = "Laptop",
+                            Price = 200M
+                        },
+                        Quantity = 1
+                    },
+                    new OrderItem
+                    {
+                        Product = new Product
+                        {
+                            ProductId = 370,
+                            Sku = "Tablet",
+                            Price = 100M
+                        },
+                        Quantity = 2
+                    }
+                }
+            };
+
+            // Act 
+            var reasons = orderService.PlaceOrder(order);
+
+            // ASsert
+            reasons.Taxes.Count().ShouldBe(1);            
+        }
+
+    }
+}
+
+
+
+
+*/
